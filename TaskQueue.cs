@@ -34,6 +34,30 @@ public class TaskQueue
         }
     }
 
+    public async Task<bool> ExecuteSpecificTask(Guid taskId)
+    {
+        (Func<CancellationToken, Task> workItem, CancellationTokenSource cts, Guid taskId, string description) taskExecuted;
+        lock (_workItems)
+        {
+            var taskList = _workItems.ToList();
+            taskExecuted = taskList.FirstOrDefault(x => x.taskId == taskId);
+
+            if (taskExecuted.Equals(default((Func<CancellationToken, Task>, CancellationTokenSource, Guid))))
+                return false; // Tarefa não encontrada            
+
+
+            taskList.Remove(taskExecuted);
+            _workItems.Clear();
+
+            foreach (var task in taskList)
+            {
+                _workItems.Enqueue(task);
+            }
+        }
+        await taskExecuted.workItem(taskExecuted.cts.Token);
+        return true;
+    }
+
     // Lista as descrições das tarefas enfileiradas
     public List<Guid> GetPendingTasks()
     {
@@ -53,6 +77,28 @@ public class TaskQueue
 
             task.cts.Cancel(); // Cancela a tarefa            
             return true; // Tarefa encontrada e cancelada
+        }
+    }
+
+    public bool DeleteTask(Guid taskId)
+    {
+        lock (_workItems)
+        {
+            var taskList = _workItems.ToList();
+            var taskRemoved = taskList.FirstOrDefault(x => x.taskId == taskId);
+
+            if (taskRemoved.Equals(default((Func<CancellationToken, Task>, CancellationTokenSource, Guid))))
+                return false; // Tarefa não encontrada            
+
+            taskList.Remove(taskRemoved);
+            _workItems.Clear();
+
+            foreach (var task in taskList)
+            {
+                _workItems.Enqueue(task);
+            }
+
+            return true;
         }
     }
 }

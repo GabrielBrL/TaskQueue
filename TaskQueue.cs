@@ -3,6 +3,7 @@ namespace QueueTasks;
 public class TaskQueue
 {
     private readonly Queue<(Func<CancellationToken, Task> workItem, CancellationTokenSource cts, Guid taskId, string description)> _workItems = new();
+    private readonly Dictionary<Guid, CancellationTokenSource> _workItemsRunnign = new();
     private readonly SemaphoreSlim _signal = new(0);
 
     // Adiciona uma tarefa à fila com uma descrição e um CancellationTokenSource
@@ -16,7 +17,7 @@ public class TaskQueue
         lock (_workItems)
         {
             _workItems.Enqueue((workItem, cts, taskId, description));
-            _signal.Release(); // Libera o "sinal" para processar
+            _signal.Release();
         }
 
         return taskId; // Retorna o ID da tarefa
@@ -54,16 +55,39 @@ public class TaskQueue
                 _workItems.Enqueue(task);
             }
         }
-        await taskExecuted.workItem(taskExecuted.cts.Token);
+        lock (_workItemsRunnign)
+        {
+            _workItemsRunnign[taskId] = taskExecuted.cts;
+        }
+
+        try
+        {
+            await taskExecuted.workItem(taskExecuted.cts.Token);
+        }
+        finally
+        {
+            lock (_workItemsRunnign)
+            {
+                _workItemsRunnign.Remove(taskId);
+            }
+        }
         return true;
     }
 
     // Lista as descrições das tarefas enfileiradas
-    public List<Guid> GetPendingTasks()
+    public List<KeyValuePair<Guid, string>> GetPendingTasks()
     {
         lock (_workItems)
         {
-            return _workItems.Select(w => w.taskId).ToList();
+            return _workItems.Select(w => new KeyValuePair<Guid, string>(w.taskId, w.description)).ToList();
+        }
+    }
+
+    public List<Guid> GetRunningTasks()
+    {
+        lock (_workItemsRunnign)
+        {
+            return _workItemsRunnign.Select(w => w.Key).ToList();
         }
     }
 
@@ -80,7 +104,7 @@ public class TaskQueue
         }
     }
 
-    public bool DeleteTask(Guid taskId)
+    public bool DeleteTaskInQueue(Guid taskId)
     {
         lock (_workItems)
         {
@@ -100,5 +124,28 @@ public class TaskQueue
 
             return true;
         }
+    }
+
+    public bool DeleteTaskRunning(Guid taskId)
+    {
+        lock (_workItemsRunnign)
+        {
+            if (_workItemsRunnign.TryGetValue(taskId, out var cts))
+            {
+                cts.Cancel();
+                var task = _workItems.FirstOrDefault(x => x.taskId == taskId);
+                var listWorkItems = _workItems.ToList();
+                _workItems.Clear();
+
+                listWorkItems.Remove(task);
+
+                foreach (var item in listWorkItems)
+                {
+                    _workItems.Enqueue(item);
+                }
+                return true;
+            }
+        }
+        return false;
     }
 }

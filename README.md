@@ -42,7 +42,7 @@ You can delete a task running or in enqueue using...
 ## Install
 
 ```bash
-  dotnet add package EnqueueTasks
+  dotnet add package QueueTasks
 ```
     
 ## Author

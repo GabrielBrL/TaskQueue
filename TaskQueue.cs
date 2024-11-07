@@ -6,7 +6,12 @@ public class TaskQueue
     private readonly Dictionary<Guid, CancellationTokenSource> _workItemsRunnign = new();
     private readonly SemaphoreSlim _signal = new(0);
 
-    // Adiciona uma tarefa à fila com uma descrição e um CancellationTokenSource
+    /// <summary>
+    /// Enqueue the tasks
+    /// </summary>
+    /// <param name="workItem">Function that will be enqueue</param>
+    /// <param name="description">A little description to save what will execute</param>
+    /// <returns>Guid of the task</returns>
     public Guid Enqueue(Func<CancellationToken, Task> workItem, string description)
     {
         if (workItem == null) throw new ArgumentNullException(nameof(workItem));
@@ -16,14 +21,21 @@ public class TaskQueue
 
         lock (_workItems)
         {
-            _workItems.Enqueue((workItem, cts, taskId, description));
-            _signal.Release();
+            _workItems.Enqueue((workItem, cts, taskId, description));            
         }
 
-        return taskId; // Retorna o ID da tarefa
+        return taskId;
     }
 
-    // Pega a próxima tarefa da fila
+    /// <summary>
+    /// Dequeue the tasks
+    /// </summary>
+    /// <param name="cancellationToken">Function that will be take off from the queue</param>    
+    /// <returns>
+    /// - Function from the queue
+    /// - CancellationTokenSource
+    /// - Guid of the task
+    /// </returns>
     public async Task<(Func<CancellationToken, Task> workItem, CancellationTokenSource cts, Guid taskId)> DequeueAsync(CancellationToken cancellationToken)
     {
         await _signal.WaitAsync(cancellationToken); // Espera até que haja uma tarefa disponível
@@ -35,6 +47,13 @@ public class TaskQueue
         }
     }
 
+    /// <summary>
+    /// Execute specific task by Guid
+    /// </summary>
+    /// <param name="taskId">Function Guid</param>    
+    /// <returns>
+    /// Return if the task was found and executed
+    /// </returns>
     public async Task<bool> ExecuteSpecificTask(Guid taskId)
     {
         (Func<CancellationToken, Task> workItem, CancellationTokenSource cts, Guid taskId, string description) taskExecuted;
@@ -74,7 +93,10 @@ public class TaskQueue
         return true;
     }
 
-    // Lista as descrições das tarefas enfileiradas
+    /// <summary>
+    /// Get the pending tasks list
+    /// </summary>
+    /// <returns>Return a list containing the pending tasks</returns>
     public List<KeyValuePair<Guid, string>> GetPendingTasks()
     {
         lock (_workItems)
@@ -82,7 +104,10 @@ public class TaskQueue
             return _workItems.Select(w => new KeyValuePair<Guid, string>(w.taskId, w.description)).ToList();
         }
     }
-
+    /// <summary>
+    /// Get the running tasks list
+    /// </summary>
+    /// <returns>Return a list containing the running tasks</returns>
     public List<Guid> GetRunningTasks()
     {
         lock (_workItemsRunnign)
@@ -91,7 +116,11 @@ public class TaskQueue
         }
     }
 
-    // Cancela uma tarefa específica
+    /// <summary>
+    /// Cancel a task running
+    /// </summary>
+    /// <param name="taskId">Function Guid</param>
+    /// <returns>If the task was found and canceled</returns>
     public bool CancelTask(Guid taskId)
     {
         lock (_workItems)
@@ -103,7 +132,11 @@ public class TaskQueue
             return true; // Tarefa encontrada e cancelada
         }
     }
-
+    /// <summary>
+    /// Delete a task enqueued
+    /// </summary>
+    /// <param name="taskId">Function Guid</param>
+    /// <returns>If the task was found and deleted</returns>
     public bool DeleteTaskInQueue(Guid taskId)
     {
         lock (_workItems)
@@ -125,7 +158,11 @@ public class TaskQueue
             return true;
         }
     }
-
+    /// <summary>
+    /// Delete a task running
+    /// </summary>
+    /// <param name="taskId">Function Guid</param>
+    /// <returns>If the task was found and deleted</returns>
     public bool DeleteTaskRunning(Guid taskId)
     {
         lock (_workItemsRunnign)
